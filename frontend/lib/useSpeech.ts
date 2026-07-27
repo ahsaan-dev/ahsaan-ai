@@ -94,10 +94,11 @@ export function useSpeech(
     recognition.interimResults = true;
     recognition.lang = toSpeechLang(settings.language);
 
-    recognition.onresult = (event: SpeechRecognitionEventLike) => {
+recognition.onresult = (event: SpeechRecognitionEventLike) => {
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
+        if (!result) continue;
         if (result.isFinal) {
           onFinalTranscript(result[0].transcript.trim());
         } else {
