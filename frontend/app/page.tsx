@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatWindow } from "@/components/ChatWindow";
 import { Composer } from "@/components/Composer";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { CallOverlay } from "@/components/CallOverlay";
 import { useChatStream } from "@/lib/useChatStream";
 import { useSpeech } from "@/lib/useSpeech";
 import { DEFAULT_VOICE_SETTINGS, VoiceSettings } from "@/lib/types";
@@ -15,6 +16,8 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
   const [lastTurnWasVoice, setLastTurnWasVoice] = useState(false);
+  const [callMode, setCallMode] = useState(false);
+  const [muted, setMuted] = useState(false);
 
   const { messages, isStreaming, error, sendMessage, clearConversation } = useChatStream(
     (fullText) => {
@@ -48,6 +51,64 @@ export default function Home() {
     sendMessage(text, voiceMode);
   };
 
+  // --- Call mode: auto-resume listening after the assistant stops speaking ---
+  const callModeRef = useRef(false);
+  useEffect(() => {
+    callModeRef.current = callMode;
+  }, [callMode]);
+
+  const prevSpeaking = useRef(speaking);
+  useEffect(() => {
+    if (prevSpeaking.current && !speaking && callModeRef.current && !muted) {
+      const t = setTimeout(() => startListening(), 300);
+      return () => clearTimeout(t);
+    }
+    prevSpeaking.current = speaking;
+  }, [speaking, muted, startListening]);
+
+  // --- Call mode: auto-resume listening if recognition stops itself (silence) ---
+  const prevListening = useRef(listening);
+  useEffect(() => {
+    if (
+      prevListening.current &&
+      !listening &&
+      callModeRef.current &&
+      !speaking &&
+      !isStreaming &&
+      !muted
+    ) {
+      const t = setTimeout(() => startListening(), 300);
+      return () => clearTimeout(t);
+    }
+    prevListening.current = listening;
+  }, [listening, speaking, isStreaming, muted, startListening]);
+
+  const startCall = () => {
+    setCallMode(true);
+    setMuted(false);
+    setLastTurnWasVoice(true);
+    startListening();
+  };
+
+  const endCall = () => {
+    setCallMode(false);
+    setMuted(false);
+    stopListening();
+    stopSpeaking();
+  };
+
+  const toggleMute = () => {
+    if (muted) {
+      setMuted(false);
+      startListening();
+    } else {
+      setMuted(true);
+      stopListening();
+    }
+  };
+
+  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
+
   return (
     <main className="flex h-screen bg-void">
       <Sidebar onNewSession={clearConversation} onOpenSettings={() => setSettingsOpen(true)} />
@@ -60,6 +121,14 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2">
             {error && <span className="text-xs text-danger">{error}</span>}
+            {voiceSupported && (
+              <button
+                onClick={startCall}
+                className="rounded-full bg-signal px-4 py-1.5 text-xs font-medium text-void transition hover:opacity-90"
+              >
+                Start call
+              </button>
+            )}
             <PrivacyBadge />
             <ThemeToggle />
           </div>
@@ -87,6 +156,18 @@ export default function Home() {
         onChange={setVoiceSettings}
         voices={voices}
       />
+
+      {callMode && (
+        <CallOverlay
+          listening={listening}
+          speaking={speaking}
+          muted={muted}
+          interimTranscript={interimTranscript}
+          lastAssistantText={lastAssistantMessage?.content ?? ""}
+          onToggleMute={toggleMute}
+          onEndCall={endCall}
+        />
+      )}
     </main>
   );
 }
