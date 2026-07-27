@@ -1,6 +1,6 @@
 import json
 
-from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
@@ -12,26 +12,21 @@ from ..schemas import ChatRequest
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
-def _client() -> AsyncAnthropic:
+def _client() -> AsyncOpenAI:
     settings = get_settings()
-    if not settings.anthropic_api_key:
+    if not settings.groq_api_key:
         raise HTTPException(
             status_code=500,
-            detail="ANTHROPIC_API_KEY is not configured on the server.",
+            detail="GROQ_API_KEY is not configured on the server.",
         )
-    return AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return AsyncOpenAI(
+        api_key=settings.groq_api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
 
 
 @router.post("")
 async def chat(payload: ChatRequest, request: Request):
-    """
-    Streams the assistant's reply as Server-Sent Events.
-
-    Privacy note: this handler never writes `payload` to a database, file,
-    or log line. The conversation exists only for the lifetime of this
-    request — the client is responsible for holding history in memory and
-    resending it each turn (see frontend/lib/useChatStream.ts).
-    """
     settings = get_settings()
     client = _client()
 
@@ -41,29 +36,28 @@ async def chat(payload: ChatRequest, request: Request):
     language_hint = detect_language_hint(last_user_message)
     system_prompt = build_system_prompt(language_hint, voice_mode=payload.voice_mode)
 
-    anthropic_messages = [
+    openai_messages = [{"role": "system", "content": system_prompt}] + [
         {"role": m.role, "content": m.content} for m in payload.messages
     ]
 
     async def event_stream():
         try:
-            async with client.messages.stream(
+            stream = await client.chat.completions.create(
                 model=settings.llm_model,
                 max_tokens=settings.llm_max_tokens,
-                system=system_prompt,
-                messages=anthropic_messages,
-            ) as stream:
-                async for text in stream.text_stream:
-                    yield f"data: {json.dumps({'type': 'token', 'text': text})}\n\n"
+                messages=openai_messages,
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield f"data: {json.dumps({'type': 'token', 'text': delta})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        except Exception as exc:  # noqa: BLE001 — surfaced to client, not logged with content
+        except Exception as exc:  # noqa: BLE001
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-store",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
