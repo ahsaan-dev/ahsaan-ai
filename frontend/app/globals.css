@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Dark — default. "Signal board": ink-navy base, amber signal accent. */
+  --void: 11 15 20;
+  --panel: 19 26 36;
+  --panel-2: 27 36 48;
+  --border: 35 44 57;
+  --ink: 232 237 244;
+  --muted: 138 151 168;
+  --signal: 245 166 35;
+  --trace: 91 141 239;
+  --live: 61 220 151;
+  --danger: 255 92 92;
+}
+
+.light {
+  --void: 247 248 250;
+  --panel: 255 255 255;
+  --panel-2: 240 242 245;
+  --border: 224 228 233;
+  --ink: 18 22 28;
+  --muted: 92 102 114;
+  --signal: 179 100 8;
+  --trace: 51 90 187;
+  --live: 22 141 96;
+  --danger: 200 50 50;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html,
+body {
+  background-color: rgb(var(--void));
+  color: rgb(var(--ink));
+}
+
+body {
+  font-family: var(--font-body), sans-serif;
+}
+
+::selection {
+  background: rgb(var(--signal) / 0.3);
+}
+
+/* Thin, quiet scrollbars that match the panel surfaces */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border));
+  border-radius: 999px;
+}
+
+.prose-code pre {
+  background: rgb(var(--panel-2));
+  border: 1px solid rgb(var(--border));
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+
+.prose-code code {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.85rem;
+}
+
+.prose-code p {
+  line-height: 1.65;
+  margin: 0.5rem 0;
+}
+
+.prose-code ul,
+.prose-code ol {
+  margin: 0.4rem 0 0.4rem 1.25rem;
+}
+
+.prose-code a {
+  color: rgb(var(--trace));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
